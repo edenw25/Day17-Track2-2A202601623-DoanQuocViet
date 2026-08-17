@@ -30,11 +30,14 @@ with DAG(
     default_args=DEFAULT_ARGS,
     tags=["ai-support", "daily"],
     # ------------------------------------------------------------------
-    # TODO (nhiệm vụ 1): hai tham số dưới đây quyết định chuyện gì xảy ra
-    # khi ai đó bấm Clear Task, và khi DAG bị dồn nhiều lần chạy cùng lúc.
-    # Đọc lại triệu chứng ở phiếu #1041 rồi đặt lại cho đúng.
-    catchup=True,
-    # max_active_runs=?
+    # catchup=False: không tự schedule chạy bù mọi ngày quá khứ khi DAG được
+    #   bật lại hay khi Clear Task — backfill phải là thao tác chủ động.
+    # max_active_runs=1: chỉ một run được ghi vào warehouse tại một thời
+    #   điểm, tránh hai run đồng thời cùng merge vào một bảng Gold.
+    # Hai tham số này chỉ GIẢM TẦN SUẤT kích hoạt lỗi, không phải root cause:
+    # root cause nằm ở materialization của model (xem gold_training_set.sql).
+    catchup=False,
+    max_active_runs=1,
     # ------------------------------------------------------------------
 ) as dag:
 

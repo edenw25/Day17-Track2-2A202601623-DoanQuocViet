@@ -29,9 +29,14 @@
 --   rõ hai vấn đề này tách nhau.
 -- ---------------------------------------------------------------------------
 
+-- Grain là (event_date, customer_id) => unique_key gồm hai cột. Window nới
+-- rộng khiến cùng một cặp được tính lại nhiều lượt, nên phải 'merge' để lần
+-- tính sau ghi đè lần trước (nếu không sẽ lặp lại đúng lỗi của nhiệm vụ 1).
 {{ config(
-    materialized     = 'incremental',
-    on_schema_change = 'fail'
+    materialized         = 'incremental',
+    unique_key           = ['event_date', 'customer_id'],
+    incremental_strategy = 'merge',
+    on_schema_change     = 'fail'
 ) }}
 
 select
@@ -49,7 +54,12 @@ select
 from {{ ref('silver_events') }}
 
 {% if is_incremental() %}
-where event_date > (select max(event_date) from {{ this }})
+-- Lookback window = 3 ngày. Căn cứ đo trên bronze_events:
+--   p50 = 0,13 ngày · p95 = 1,81 ngày · p99 = 2,73 ngày · max = 2,94 ngày
+--   5,05% bản ghi tới kho muộn hơn 1 ngày so với lúc sự kiện xảy ra.
+-- P99 = 2,73 ngày => lùi 3 ngày (làm tròn lên) phủ hết đuôi phân bố quan sát
+-- được. Dùng `>=` để chính ngày biên cũng được tính lại.
+where event_date >= (select max(event_date) from {{ this }}) - interval 3 day
 {% endif %}
 
 group by 1, 2, 3, 4

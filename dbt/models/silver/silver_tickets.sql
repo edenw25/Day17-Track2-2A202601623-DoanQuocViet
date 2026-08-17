@@ -35,16 +35,29 @@
 
 {{ config(materialized = 'table') }}
 
-with ranked as (
+-- LỌC TRƯỚC: bỏ những BẢN GHI CDC mà macro không chuẩn hoá được (chúng đi
+-- vào quarantine_tickets). Ticket vẫn giữ nguyên nếu còn bản ghi hợp lệ ở lần
+-- cập nhật trước đó.
+with valid as (
 
     select
         *,
-        {{ normalize_priority('priority_raw') }}             as priority_clean,
+        {{ normalize_priority('priority_raw') }}             as priority_clean
+    from {{ source('bronze', 'bronze_tickets_cdc') }}
+    where {{ normalize_priority('priority_raw') }} is not null
+
+),
+
+-- XẾP HẠNG SAU: bản ghi hợp lệ mới nhất của mỗi ticket là _rn = 1.
+ranked as (
+
+    select
+        *,
         row_number() over (
             partition by ticket_id
             order by event_time desc, cdc_seq desc
         ) as _rn
-    from {{ source('bronze', 'bronze_tickets_cdc') }}
+    from valid
 
 ),
 
